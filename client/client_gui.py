@@ -14,24 +14,30 @@ class ClientGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("🔐 Secure Chat Client")
-        self.root.geometry("600x520")
+        self.root.geometry("650x540")
         self.root.resizable(False, False)
 
-        # --- STYLE ---
+        self.client_socket = None
+
+        # ---------------- STYLE ----------------
         style = ttk.Style()
         style.theme_use("default")
         style.configure("TButton", padding=6)
         style.configure("TLabel", font=("Segoe UI", 10))
-        style.configure("Header.TLabel", font=("Segoe UI", 14, "bold"))
+        style.configure("Header.TLabel", font=("Segoe UI", 15, "bold"))
 
-        # --- HEADER ---
-        header = ttk.Label(root, text="Python Secure Chat Client", style="Header.TLabel")
+        # ---------------- HEADER ----------------
+        header = ttk.Label(
+            root,
+            text="Python Secure Chat Client",
+            style="Header.TLabel"
+        )
         header.pack(pady=10)
 
-        # --- CHAT AREA ---
+        # ---------------- CHAT AREA ----------------
         self.text_area = ScrolledText(
             root,
-            width=70,
+            width=75,
             height=18,
             font=("Consolas", 10),
             bg="#f7f7f7"
@@ -39,55 +45,80 @@ class ClientGUI:
         self.text_area.pack(padx=10)
         self.text_area.config(state="disabled")
 
-        # --- CONTROL FRAME ---
+        # ---------------- CONTROL FRAME ----------------
         control = ttk.Frame(root)
         control.pack(pady=10, fill="x", padx=10)
 
         ttk.Label(control, text="Algoritma:").grid(row=0, column=0, padx=5)
+
         self.algorithm = tk.StringVar(value="Sezar")
         self.algorithm_box = ttk.Combobox(
             control,
             textvariable=self.algorithm,
-            values=["Sezar", "Vigenere", "Affine", "Playfair", "Hill"],
-            width=12,
+            values=[
+                "Sezar",
+                "Vigenere",
+                "Affine",
+                "Playfair",
+                "Hill",
+                "AES",
+                "DES",
+                "AES (Manual)",
+                "DES (Manual)"
+            ],
+            width=14,
             state="readonly"
         )
         self.algorithm_box.grid(row=0, column=1, padx=5)
 
         ttk.Label(control, text="Anahtar:").grid(row=0, column=2, padx=5)
-        self.key_entry = ttk.Entry(control, width=10)
-        self.key_entry.insert(0, "3")
+        self.key_entry = ttk.Entry(control, width=14)
+        self.key_entry.insert(0, "anahtar")
         self.key_entry.grid(row=0, column=3, padx=5)
 
-        # --- MESSAGE ENTRY ---
-        self.entry = ttk.Entry(root, width=55)
+        # ---------------- MESSAGE ENTRY ----------------
+        self.entry = ttk.Entry(root, width=60)
         self.entry.pack(padx=10, pady=5)
 
-        # --- BUTTONS ---
+        # ---------------- BUTTONS ----------------
         button_frame = ttk.Frame(root)
-        button_frame.pack(pady=5)
+        button_frame.pack(pady=8)
 
-        ttk.Button(button_frame, text="📨 Gönder", command=self.send_message).grid(row=0, column=0, padx=5)
-        ttk.Button(button_frame, text="🔌 Server'a Bağlan", command=self.connect).grid(row=0, column=1, padx=5)
+        ttk.Button(
+            button_frame,
+            text="📨 Gönder",
+            command=self.send_message
+        ).grid(row=0, column=0, padx=5)
 
-        self.client_socket = None
+        ttk.Button(
+            button_frame,
+            text="🔌 Server'a Bağlan",
+            command=self.connect
+        ).grid(row=0, column=1, padx=5)
 
+    # ---------------- LOG ----------------
     def log(self, message):
         self.text_area.config(state="normal")
         self.text_area.insert(tk.END, message + "\n")
         self.text_area.config(state="disabled")
         self.text_area.yview(tk.END)
 
+    # ---------------- CONNECT ----------------
     def connect(self):
         try:
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.client_socket.connect((HOST, PORT))
             self.log("Sen: Server'a bağlandın.")
 
-            threading.Thread(target=self.listen_server, daemon=True).start()
+            threading.Thread(
+                target=self.listen_server,
+                daemon=True
+            ).start()
+
         except Exception as e:
             self.log(f"[HATA] {e}")
 
+    # ---------------- LISTEN SERVER ----------------
     def listen_server(self):
         while True:
             try:
@@ -97,17 +128,23 @@ class ClientGUI:
                     break
 
                 data = data.decode("utf-8")
-                algorithm, key, encrypted = data.split("|")
+                algorithm, key, encrypted = data.split("|", 2)
 
-                decrypted = decrypt_message(algorithm, encrypted, key)
+                decrypted = decrypt_message(
+                    algorithm,
+                    encrypted,
+                    key
+                )
 
-                self.log(f"\nKarşı taraf ({algorithm}):")
+                self.log(f"\nKarşı Taraf ({algorithm})")
                 self.log(f"ŞİFRELİ : {encrypted}")
                 self.log(f"ÇÖZÜLMÜŞ: {decrypted}")
 
-            except:
+            except Exception as e:
+                self.log(f"[HATA] {e}")
                 break
 
+    # ---------------- SEND MESSAGE ----------------
     def send_message(self):
         if not self.client_socket:
             self.log("[HATA] Server'a bağlı değilsin")
@@ -121,11 +158,16 @@ class ClientGUI:
         key = self.key_entry.get()
 
         try:
-            encrypted = encrypt_message(algorithm, message, key)
+            encrypted = encrypt_message(
+                algorithm,
+                message,
+                key
+            )
+
             packet = f"{algorithm}|{key}|{encrypted}"
             self.client_socket.send(packet.encode("utf-8"))
 
-            self.log(f"\nSen ({algorithm}):")
+            self.log(f"\nSen ({algorithm})")
             self.log(f"ŞİFRELİ : {encrypted}")
             self.log(f"ÇÖZÜLMÜŞ: {message}")
 
