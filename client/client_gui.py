@@ -73,7 +73,7 @@ class ClientGUI:
 
         ttk.Label(control, text="Anahtar:").grid(row=0, column=2, padx=5)
         self.key_entry = ttk.Entry(control, width=14)
-        self.key_entry.insert(0, "anahtar")
+        self.key_entry.insert(0, "")
         self.key_entry.grid(row=0, column=3, padx=5)
 
         # ---------------- MESSAGE ENTRY ----------------
@@ -136,7 +136,7 @@ class ClientGUI:
                     key
                 )
 
-                self.log(f"\nKarşı Taraf ({algorithm})")
+                self.log(f"\nSERVER ({algorithm})")
                 self.log(f"ŞİFRELİ : {encrypted}")
                 self.log(f"ÇÖZÜLMÜŞ: {decrypted}")
 
