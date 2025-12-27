@@ -1,7 +1,9 @@
 import socket
 import os
-from sifreleme.crypto_manager import encrypt_message, decrypt_message
-from sifreleme.asymmetric.rsa_key_exchange import encrypt_sym_key # Daha önce düzelttiğimiz fonksiyon
+import time
+
+from sifreleme.crypto_manager import encrypt_message
+from sifreleme.asymmetric.rsa_key_exchange import encrypt_sym_key
 
 HOST = "127.0.0.1"
 PORT = 12345
@@ -23,8 +25,7 @@ def start_client():
         if message.lower() == "q":
             break
 
-        # 2. ADIM: Algoritmaya göre rastgele anahtar üret (Ödev gereksinimi)
-        # AES için 16 byte, DES için 8 byte
+        # 2. ADIM: Algoritmaya göre anahtar üret
         if "AES" in algorithm:
             sym_key = os.urandom(16)
         elif "DES" in algorithm:
@@ -32,20 +33,29 @@ def start_client():
         else:
             sym_key = input("Klasik şifreleme anahtarı girin: ").encode()
 
-        # 3. ADIM: Simetrik anahtarı RSA ile şifrele (Sadece anahtar dağıtımı için)
+        # 3. ADIM: Simetrik anahtarı RSA ile şifrele
         encrypted_key_b64 = encrypt_sym_key(sym_key, public_key_pem)
 
-        # 4. ADIM: Mesajı simetrik anahtarla şifrele
-        # crypto_manager bytes key beklediği için sym_key (bytes) gönderiyoruz
+        # 4. ADIM: MESAJI ŞİFRELE (⏱️ SÜRE ÖLÇÜMÜ)
+        start_enc = time.time()
         encrypted_msg = encrypt_message(algorithm, message, sym_key)
+        end_enc = time.time()
 
-        # 5. ADIM: Paketi oluştur ve gönder
-        # Format: ALGORITMA | RSA_SIFRELI_ANAHTAR | SIFRELI_MESAJ
-        packet = f"{algorithm}|{encrypted_key_b64}|{encrypted_msg}"
+        encryption_time = end_enc - start_enc
+        print(f"[TIMING] Şifreleme Süresi: {encryption_time:.6f} saniye")
+
+        # 5. ADIM: Gönderme zamanını al
+        send_time = time.time()
+
+        # 6. ADIM: Paketi oluştur
+        # Format:
+        # ALGORITHM | RSA_KEY | ENCRYPTED_MSG | SEND_TIME
+        packet = f"{algorithm}|{encrypted_key_b64}|{encrypted_msg}|{send_time}"
+
         sock.send(packet.encode("utf-8"))
-        print(f"[CLIENT] Paket gönderildi. (RSA ile şifreli anahtar dahil)")
+        print("[CLIENT] Paket gönderildi.")
 
-        # Sunucudan cevap (ACK) bekleme kısmı (opsiyonel)
+        # Sunucudan ACK
         data = sock.recv(4096)
         if data:
             print("[SERVER]: Mesaj başarıyla alındı ve çözüldü.")

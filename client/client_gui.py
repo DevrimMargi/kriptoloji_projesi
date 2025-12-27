@@ -7,6 +7,7 @@ import base64
 import os
 import random
 import string
+import time
 
 # ---- proje içi modüller ----
 from sifreleme.crypto_manager import encrypt_message, decrypt_message
@@ -24,9 +25,9 @@ class ClientGUI:
         self.root.resizable(False, False)
 
         self.client_socket = None
-        self.session_key = None            # aktif anahtar
+        self.session_key = None
         self.server_rsa_public_key = None
-        self.key_sent = False              # AES/DES için RSA key exchange yapıldı mı
+        self.key_sent = False
 
         self.setup_ui()
 
@@ -81,6 +82,14 @@ class ClientGUI:
         ttk.Button(btns, text="📨 Gönder", command=self.send_message).grid(row=0, column=0, padx=5)
         ttk.Button(btns, text="🔌 Server'a Bağlan", command=self.connect).grid(row=0, column=1, padx=5)
 
+        # ⏱ SÜRELENDİRME LABEL (EKLENEN TEK UI PARÇASI)
+        self.timing_label = ttk.Label(
+            self.root,
+            text="⏱ Şifreleme Süresi: -",
+            font=("Segoe UI", 10, "italic")
+        )
+        self.timing_label.pack(pady=5)
+
     # ---------------- LOG ----------------
     def log(self, msg):
         self.text_area.config(state="normal")
@@ -108,7 +117,6 @@ class ClientGUI:
         algo = self.algorithm.get()
         self.key_sent = False
 
-        # 🔓 KLASİK ALGORİTMALAR
         if algo == "Sezar":
             self.session_key = str(random.randint(1, 25))
 
@@ -128,7 +136,6 @@ class ClientGUI:
         elif algo == "Hill":
             self.session_key = "2,3;1,4"
 
-        # 🔐 MODERN ALGORİTMALAR (AES / DES)
         elif algo in ["AES", "DES"]:
             self.session_key = os.urandom(16 if algo == "AES" else 8)
 
@@ -160,29 +167,17 @@ class ClientGUI:
                 parts = data.decode("utf-8").split("|")
                 header = parts[0]
 
-                # 🔐 RSA PUBLIC KEY
                 if header == "RSA_PUBLIC_KEY":
                     self.server_rsa_public_key = base64.b64decode(parts[1])
                     self.log("[RSA] Sunucu public key alındı")
                     continue
 
-                # 🔐 AES / DES cevabı
-                if header in ["AES", "DES"]:
-                    encrypted_msg = parts[1]
-                    decrypted = decrypt_message(
-                        header,
-                        encrypted_msg,
-                        self.session_key
-                    )
-
-                # 🔓 KLASİK cevaplar (opsiyonel)
-                else:
-                    encrypted_msg = parts[1]
-                    decrypted = decrypt_message(
-                        header,
-                        encrypted_msg,
-                        self.session_key
-                    )
+                encrypted_msg = parts[1]
+                decrypted = decrypt_message(
+                    header,
+                    encrypted_msg,
+                    self.session_key
+                )
 
                 self.log(f"\nSERVER ({header})")
                 self.log(f"ÇÖZÜLMÜŞ: {decrypted}")
@@ -208,17 +203,20 @@ class ClientGUI:
         algorithm = self.algorithm.get()
 
         try:
+            # ⏱ ŞİFRELEME SÜRESİ ÖLÇÜMÜ (TEK KRİTİK EKLEME)
+            start_enc = time.time()
+
             encrypted = encrypt_message(
                 algorithm,
                 message,
                 self.session_key
             )
 
-            # 🔓 KLASİKLER
+            end_enc = time.time()
+            encryption_time = end_enc - start_enc
+
             if algorithm in ["Sezar", "Vigenere", "Affine", "Playfair", "Hill"]:
                 packet = f"{algorithm}|{self.session_key}|{encrypted}"
-
-            # 🔐 AES / DES
             else:
                 if not self.key_sent:
                     self.log("[HATA] AES/DES anahtarı server'a gönderilmedi")
@@ -230,6 +228,11 @@ class ClientGUI:
             self.log(f"\nSen ({algorithm})")
             self.log(f"ŞİFRELİ : {encrypted[:40]}...")
             self.log(f"ASIL    : {message}")
+
+            # ⏱ GUI'DE GÖSTER
+            self.timing_label.config(
+                text=f"⏱ Şifreleme Süresi: {encryption_time:.6f} saniye"
+            )
 
             self.entry.delete(0, tk.END)
 

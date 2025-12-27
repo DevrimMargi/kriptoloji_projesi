@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 import base64
+import time
 
 from sifreleme.crypto_manager import encrypt_message, decrypt_message
 from sifreleme.asymmetric.rsa_key_exchange import (
@@ -14,6 +15,7 @@ from sifreleme.asymmetric.rsa_key_exchange import (
 HOST = "127.0.0.1"
 PORT = 12345
 
+
 # ---------------- SERVER GUI ----------------
 class ServerGUI:
     def __init__(self, root):
@@ -23,10 +25,13 @@ class ServerGUI:
         self.root.resizable(False, False)
 
         self.conn = None
-        self.session_key = None  # AES / DES için (bytes)
+        self.session_key = None
 
         self.rsa_private_key = None
         self.rsa_public_key = None
+
+        # ⏱ Süre bilgileri
+        self.last_decrypt_time = None
 
         self.setup_ui()
 
@@ -79,6 +84,21 @@ class ServerGUI:
             self.root, text="📨 Gönder", command=self.send_message
         ).pack(pady=5)
 
+        # ⏱ SÜRE ÖLÇ BUTONU
+        ttk.Button(
+            self.root,
+            text="⏱ Süreyi Göster",
+            command=self.show_timing
+        ).pack(pady=5)
+
+        # ⏱ LABEL
+        self.timing_label = ttk.Label(
+            self.root,
+            text="⏱ Son Çözme Süresi: -",
+            font=("Segoe UI", 10, "italic")
+        )
+        self.timing_label.pack(pady=5)
+
     # ---------------- LOG ----------------
     def log(self, msg):
         self.text_area.config(state="normal")
@@ -88,7 +108,6 @@ class ServerGUI:
 
     # ---------------- START SERVER ----------------
     def start_server(self):
-        # 🔐 RSA anahtar çifti üret
         self.rsa_private_key, self.rsa_public_key = generate_key_pair()
         self.log("[RSA] RSA anahtar çifti üretildi (Server)")
 
@@ -109,7 +128,6 @@ class ServerGUI:
         self.conn, addr = server_socket.accept()
         self.log(f"[BAĞLANTI] Client bağlandı: {addr}")
 
-        # 🔐 RSA PUBLIC KEY → CLIENT
         public_key_b64 = base64.b64encode(self.rsa_public_key).decode("utf-8")
         self.conn.send(
             f"RSA_PUBLIC_KEY|{public_key_b64}".encode("utf-8")
@@ -125,7 +143,6 @@ class ServerGUI:
                 parts = data.decode("utf-8").split("|")
                 algorithm = parts[0]
 
-                # 🔐 RSA KEY EXCHANGE (AES / DES)
                 if algorithm == "KEY_EXCHANGE":
                     self.session_key = decrypt_sym_key(
                         parts[1],
@@ -134,30 +151,31 @@ class ServerGUI:
                     self.log("[RSA] AES/DES session key alındı ve çözüldü")
                     continue
 
-                # 🔓 KLASİK ALGORİTMALAR
-                if algorithm in ["Sezar", "Vigenere", "Affine", "Playfair", "Hill"]:
-                    key = parts[1]                 # string
-                    encrypted_msg = parts[2]
+                # ⏱ DECRYPT SÜRESİ ÖLÇÜMÜ
+                start_dec = time.time()
 
+                if algorithm in ["Sezar", "Vigenere", "Affine", "Playfair", "Hill"]:
+                    key = parts[1]
+                    encrypted_msg = parts[2]
                     decrypted = decrypt_message(
                         algorithm,
                         encrypted_msg,
                         key
                     )
-
-                # 🔐 MODERN ALGORİTMALAR (AES / DES)
                 else:
                     if not self.session_key:
-                        self.log("[HATA] Session key yok, mesaj çözülemez")
+                        self.log("[HATA] Session key yok")
                         continue
 
                     encrypted_msg = parts[1]
-
                     decrypted = decrypt_message(
                         algorithm,
                         encrypted_msg,
                         self.session_key
                     )
+
+                end_dec = time.time()
+                self.last_decrypt_time = end_dec - start_dec
 
                 self.log(f"\nCLIENT ({algorithm})")
                 self.log(f"ŞİFRELİ : {encrypted_msg[:40]}...")
@@ -166,6 +184,17 @@ class ServerGUI:
             except Exception as e:
                 self.log(f"[HATA] {e}")
                 break
+
+    # ---------------- SHOW TIMING ----------------
+    def show_timing(self):
+        if self.last_decrypt_time is None:
+            self.timing_label.config(
+                text="⏱ Henüz ölçüm yok"
+            )
+        else:
+            self.timing_label.config(
+                text=f"⏱ Son Çözme Süresi: {self.last_decrypt_time:.6f} saniye"
+            )
 
     # ---------------- SEND MESSAGE ----------------
     def send_message(self):
@@ -179,12 +208,10 @@ class ServerGUI:
 
         algo = self.algorithm.get()
 
-        # 🔓 KLASİKLER
         if algo in ["Sezar", "Vigenere", "Affine", "Playfair", "Hill"]:
             self.log("[HATA] Server klasik algoritmalar için anahtar üretmez")
             return
 
-        # 🔐 AES / DES
         if not self.session_key:
             self.log("[HATA] Session key yok")
             return
