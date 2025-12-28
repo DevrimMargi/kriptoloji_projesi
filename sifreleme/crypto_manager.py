@@ -1,3 +1,8 @@
+# =========================
+# CRYPTO MANAGER
+# =========================
+
+# 🔐 KLASİK ŞİFRELEMELER
 from sifreleme.caesar import encrypt as caesar_encrypt, decrypt as caesar_decrypt
 from sifreleme.vigenere import encrypt as vigenere_encrypt, decrypt as vigenere_decrypt
 from sifreleme.affine import encrypt as affine_encrypt, decrypt as affine_decrypt
@@ -19,12 +24,13 @@ from sifreleme.manual.manual_des import encrypt as manual_des_encrypt, decrypt a
 
 def normalize_key_for_classic(key):
     """
-    Klasik şifrelemeler için:
-    - key bytes ise string'e çevirir
-    - key zaten string ise olduğu gibi bırakır
+    Klasik şifrelemeler için anahtar doğrulaması.
+    - Klasik algoritmalar RSA session key (bytes) ile ÇALIŞMAZ
     """
     if isinstance(key, bytes):
-        return key.decode("utf-8")
+        raise ValueError(
+            "Klasik şifreleme algoritmaları RSA session key ile kullanılamaz"
+        )
     return key
 
 
@@ -62,11 +68,11 @@ ENCRYPT_MAP = {
         ]
     ),
 
-    # 🔐 KÜTÜPHANELİ (BYTES KEY)
+    # 🔐 KÜTÜPHANELİ (RSA session key / bytes)
     "AES": aes_encrypt,
     "DES": des_encrypt,
 
-    # 🔧 MANUAL (BYTES KEY)
+    # 🔧 MANUAL (RSA session key / bytes)
     "AES (Manual)": manual_aes_encrypt,
     "DES (Manual)": manual_des_encrypt,
 }
@@ -106,11 +112,11 @@ DECRYPT_MAP = {
         ]
     ),
 
-    # 🔐 KÜTÜPHANELİ (BYTES KEY)
+    # 🔐 KÜTÜPHANELİ (RSA session key / bytes)
     "AES": aes_decrypt,
     "DES": des_decrypt,
 
-    # 🔧 MANUAL (BYTES KEY)
+    # 🔧 MANUAL (RSA session key / bytes)
     "AES (Manual)": manual_aes_decrypt,
     "DES (Manual)": manual_des_decrypt,
 }
@@ -121,6 +127,9 @@ DECRYPT_MAP = {
 # --------------------------------------------------
 
 def encrypt_message(algorithm: str, message: str, key):
+    """
+    Verilen algoritmaya göre mesajı şifreler.
+    """
     if algorithm not in ENCRYPT_MAP:
         raise ValueError(f"Bilinmeyen algoritma: {algorithm}")
 
@@ -128,6 +137,9 @@ def encrypt_message(algorithm: str, message: str, key):
 
 
 def decrypt_message(algorithm: str, message: str, key):
+    """
+    Verilen algoritmaya göre mesajın şifresini çözer.
+    """
     if algorithm not in DECRYPT_MAP:
         raise ValueError(f"Bilinmeyen algoritma: {algorithm}")
 

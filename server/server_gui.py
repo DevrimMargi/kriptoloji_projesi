@@ -26,11 +26,11 @@ class ServerGUI:
 
         self.conn = None
         self.session_key = None
+        self.current_algorithm = None
 
         self.rsa_private_key = None
         self.rsa_public_key = None
 
-        # ⏱ Süre bilgileri
         self.last_decrypt_time = None
 
         self.setup_ui()
@@ -65,7 +65,9 @@ class ServerGUI:
                 "Playfair",
                 "Hill",
                 "AES",
+                "AES (Manual)",
                 "DES",
+                "DES (Manual)",
             ],
             state="readonly",
             width=15
@@ -84,14 +86,12 @@ class ServerGUI:
             self.root, text="📨 Gönder", command=self.send_message
         ).pack(pady=5)
 
-        # ⏱ SÜRE ÖLÇ BUTONU
         ttk.Button(
             self.root,
             text="⏱ Süreyi Göster",
             command=self.show_timing
         ).pack(pady=5)
 
-        # ⏱ LABEL
         self.timing_label = ttk.Label(
             self.root,
             text="⏱ Son Çözme Süresi: -",
@@ -141,35 +141,41 @@ class ServerGUI:
                     break
 
                 parts = data.decode("utf-8").split("|")
-                algorithm = parts[0]
+                header = parts[0]
 
-                if algorithm == "KEY_EXCHANGE":
+                # -------- RSA KEY EXCHANGE (AES / DES / MANUAL) --------
+                if header == "KEY_EXCHANGE":
+                    algo_name = parts[1]
+                    encrypted_key_b64 = parts[2]
+
                     self.session_key = decrypt_sym_key(
-                        parts[1],
+                        encrypted_key_b64,
                         self.rsa_private_key
                     )
-                    self.log("[RSA] AES/DES session key alındı ve çözüldü")
+
+                    self.current_algorithm = algo_name
+                    self.log(f"[RSA] {algo_name} session key alındı ve çözüldü")
                     continue
 
-                # ⏱ DECRYPT SÜRESİ ÖLÇÜMÜ
                 start_dec = time.time()
 
-                if algorithm in ["Sezar", "Vigenere", "Affine", "Playfair", "Hill"]:
+                # -------- KLASİK --------
+                if header in ["Sezar", "Vigenere", "Affine", "Playfair", "Hill"]:
                     key = parts[1]
                     encrypted_msg = parts[2]
+
                     decrypted = decrypt_message(
-                        algorithm,
+                        header,
                         encrypted_msg,
                         key
                     )
-                else:
-                    if not self.session_key:
-                        self.log("[HATA] Session key yok")
-                        continue
 
+                # -------- SİMETRİK (AES / DES / MANUAL) --------
+                else:
                     encrypted_msg = parts[1]
+
                     decrypted = decrypt_message(
-                        algorithm,
+                        header,
                         encrypted_msg,
                         self.session_key
                     )
@@ -177,7 +183,7 @@ class ServerGUI:
                 end_dec = time.time()
                 self.last_decrypt_time = end_dec - start_dec
 
-                self.log(f"\nCLIENT ({algorithm})")
+                self.log(f"\nCLIENT ({header})")
                 self.log(f"ŞİFRELİ : {encrypted_msg[:40]}...")
                 self.log(f"ÇÖZÜLMÜŞ: {decrypted}")
 

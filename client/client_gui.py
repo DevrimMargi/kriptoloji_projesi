@@ -61,7 +61,9 @@ class ClientGUI:
                 "Playfair",
                 "Hill",
                 "AES",
+                "AES (Manual)",
                 "DES",
+                "DES (Manual)",
             ],
             state="readonly",
             width=15
@@ -82,7 +84,6 @@ class ClientGUI:
         ttk.Button(btns, text="📨 Gönder", command=self.send_message).grid(row=0, column=0, padx=5)
         ttk.Button(btns, text="🔌 Server'a Bağlan", command=self.connect).grid(row=0, column=1, padx=5)
 
-        # ⏱ SÜRELENDİRME LABEL (EKLENEN TEK UI PARÇASI)
         self.timing_label = ttk.Label(
             self.root,
             text="⏱ Şifreleme Süresi: -",
@@ -117,6 +118,7 @@ class ClientGUI:
         algo = self.algorithm.get()
         self.key_sent = False
 
+        # ---- KLASİK ----
         if algo == "Sezar":
             self.session_key = str(random.randint(1, 25))
 
@@ -136,8 +138,11 @@ class ClientGUI:
         elif algo == "Hill":
             self.session_key = "2,3;1,4"
 
-        elif algo in ["AES", "DES"]:
-            self.session_key = os.urandom(16 if algo == "AES" else 8)
+        # ---- RSA + SİMETRİK (LIB + MANUAL) ----
+        elif algo in ["AES", "AES (Manual)", "DES", "DES (Manual)"]:
+            self.session_key = os.urandom(
+                16 if "AES" in algo else 8
+            )
 
             if not self.server_rsa_public_key:
                 self.log("[HATA] RSA public key henüz alınmadı")
@@ -148,7 +153,7 @@ class ClientGUI:
                 self.server_rsa_public_key
             )
 
-            packet = f"KEY_EXCHANGE|{encrypted_key_b64}"
+            packet = f"KEY_EXCHANGE|{algo}|{encrypted_key_b64}"
             self.client_socket.send(packet.encode("utf-8"))
 
             self.key_sent = True
@@ -172,14 +177,16 @@ class ClientGUI:
                     self.log("[RSA] Sunucu public key alındı")
                     continue
 
+                algo_from_server = parts[0]
                 encrypted_msg = parts[1]
+
                 decrypted = decrypt_message(
-                    header,
+                    algo_from_server,
                     encrypted_msg,
                     self.session_key
                 )
 
-                self.log(f"\nSERVER ({header})")
+                self.log(f"\nSERVER ({algo_from_server})")
                 self.log(f"ÇÖZÜLMÜŞ: {decrypted}")
 
             except Exception as e:
@@ -203,7 +210,6 @@ class ClientGUI:
         algorithm = self.algorithm.get()
 
         try:
-            # ⏱ ŞİFRELEME SÜRESİ ÖLÇÜMÜ (TEK KRİTİK EKLEME)
             start_enc = time.time()
 
             encrypted = encrypt_message(
@@ -229,7 +235,6 @@ class ClientGUI:
             self.log(f"ŞİFRELİ : {encrypted[:40]}...")
             self.log(f"ASIL    : {message}")
 
-            # ⏱ GUI'DE GÖSTER
             self.timing_label.config(
                 text=f"⏱ Şifreleme Süresi: {encryption_time:.6f} saniye"
             )

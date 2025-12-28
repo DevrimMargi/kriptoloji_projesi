@@ -1,6 +1,9 @@
 # =========================
 # MANUAL DES IMPLEMENTATION
+# (NO LIBRARIES)
 # =========================
+
+import base64
 
 # -------------------------
 # DES TABLES
@@ -120,7 +123,7 @@ S_BOX = [
 # -------------------------
 
 def permute(bits, table):
-    return [bits[i-1] for i in table]
+    return [bits[i - 1] for i in table]
 
 def xor(a, b):
     return [i ^ j for i, j in zip(a, b)]
@@ -128,19 +131,22 @@ def xor(a, b):
 def left_shift(bits, n):
     return bits[n:] + bits[:n]
 
-def str_to_bits(s):
-    return [int(b) for c in s for b in f"{ord(c):08b}"]
+def bytes_to_bits(data):
+    return [int(b) for byte in data for b in f"{byte:08b}"]
 
-def bits_to_str(bits):
-    return "".join(chr(int("".join(map(str, bits[i:i+8])), 2))
-                   for i in range(0, len(bits), 8))
+def bits_to_bytes(bits):
+    return bytes(
+        int("".join(map(str, bits[i:i+8])), 2)
+        for i in range(0, len(bits), 8)
+    )
 
 # -------------------------
 # KEY SCHEDULE
 # -------------------------
 
-def generate_keys(key_64):
-    key = permute(key_64, PC1)
+def generate_keys(key_bytes):
+    key_bits = bytes_to_bits(key_bytes)[:64]
+    key = permute(key_bits, PC1)
     C, D = key[:28], key[28:]
     keys = []
 
@@ -152,7 +158,7 @@ def generate_keys(key_64):
     return keys
 
 # -------------------------
-# FEISTEL FUNCTION
+# FEISTEL
 # -------------------------
 
 def feistel(R, key):
@@ -170,34 +176,17 @@ def feistel(R, key):
     return permute(out, P)
 
 # -------------------------
-# DES ENCRYPT / DECRYPT
+# ENCRYPT / DECRYPT
 # -------------------------
 
-def encrypt(plaintext, key):
-    bits = str_to_bits(plaintext)
-    key_bits = str_to_bits(key)[:64]
-    keys = generate_keys(key_bits)
+def encrypt(message: str, key: bytes) -> str:
+    data = message.encode("utf-8")
+    data += b"\x00" * (8 - len(data) % 8)
 
+    bits = bytes_to_bits(data)
+    keys = generate_keys(key)
     result = []
-    for i in range(0, len(bits), 64):
-        block = bits[i:i+64]
-        block += [0]*(64-len(block))
-        block = permute(block, IP)
-        L, R = block[:32], block[32:]
 
-        for k in keys:
-            L, R = R, xor(L, feistel(R, k))
-
-        result.extend(permute(R + L, IP_INV))
-
-    return bits_to_str(result)
-
-def decrypt(ciphertext, key):
-    bits = str_to_bits(ciphertext)
-    key_bits = str_to_bits(key)[:64]
-    keys = generate_keys(key_bits)[::-1]
-
-    result = []
     for i in range(0, len(bits), 64):
         block = bits[i:i+64]
         block = permute(block, IP)
@@ -208,4 +197,22 @@ def decrypt(ciphertext, key):
 
         result.extend(permute(R + L, IP_INV))
 
-    return bits_to_str(result)
+    return base64.b64encode(bits_to_bytes(result)).decode("utf-8")
+
+def decrypt(ciphertext_b64: str, key: bytes) -> str:
+    raw = base64.b64decode(ciphertext_b64)
+    bits = bytes_to_bits(raw)
+    keys = generate_keys(key)[::-1]
+    result = []
+
+    for i in range(0, len(bits), 64):
+        block = bits[i:i+64]
+        block = permute(block, IP)
+        L, R = block[:32], block[32:]
+
+        for k in keys:
+            L, R = R, xor(L, feistel(R, k))
+
+        result.extend(permute(R + L, IP_INV))
+
+    return bits_to_bytes(result).rstrip(b"\x00").decode("utf-8")
