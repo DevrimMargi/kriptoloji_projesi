@@ -12,6 +12,14 @@ from sifreleme.asymmetric.rsa_key_exchange import (
     decrypt_sym_key
 )
 
+# 🔐 ECC
+from sifreleme.asymmetric.ecc_key_exchange import (
+    generate_ecc_keys,
+    serialize_public_key,
+    load_public_key,
+    derive_session_key
+)
+
 HOST = "127.0.0.1"
 PORT = 12345
 
@@ -28,8 +36,14 @@ class ServerGUI:
         self.session_key = None
         self.current_algorithm = None
 
+        # RSA
         self.rsa_private_key = None
         self.rsa_public_key = None
+
+        # ECC
+        self.ecc_private_key = None
+        self.ecc_public_key = None
+        self.client_ecc_public_key = None
 
         self.last_decrypt_time = None
 
@@ -108,6 +122,7 @@ class ServerGUI:
 
     # ---------------- START SERVER ----------------
     def start_server(self):
+        # RSA key üret
         self.rsa_private_key, self.rsa_public_key = generate_key_pair()
         self.log("[RSA] RSA anahtar çifti üretildi (Server)")
 
@@ -128,6 +143,7 @@ class ServerGUI:
         self.conn, addr = server_socket.accept()
         self.log(f"[BAĞLANTI] Client bağlandı: {addr}")
 
+        # RSA public key gönder
         public_key_b64 = base64.b64encode(self.rsa_public_key).decode("utf-8")
         self.conn.send(
             f"RSA_PUBLIC_KEY|{public_key_b64}".encode("utf-8")
@@ -143,7 +159,7 @@ class ServerGUI:
                 parts = data.decode("utf-8").split("|")
                 header = parts[0]
 
-                # -------- RSA KEY EXCHANGE (AES / DES / MANUAL) --------
+                # -------- RSA KEY EXCHANGE --------
                 if header == "KEY_EXCHANGE":
                     algo_name = parts[1]
                     encrypted_key_b64 = parts[2]
@@ -154,7 +170,39 @@ class ServerGUI:
                     )
 
                     self.current_algorithm = algo_name
-                    self.log(f"[RSA] {algo_name} session key alındı ve çözüldü")
+                    self.log(f"[RSA] {algo_name} session key alındı")
+                    continue
+
+                # -------- ECC PUBLIC KEY EXCHANGE --------
+                if header == "ECC_PUBLIC_KEY":
+
+                    # 🔑 ECC kullanılırken algoritmayı GUI'den al
+                    self.current_algorithm = self.algorithm.get()
+
+                    # Client public key al
+                    self.client_ecc_public_key = load_public_key(
+                        base64.b64decode(parts[1])
+                    )
+
+                    # Server ECC key üret
+                    self.ecc_private_key, self.ecc_public_key = generate_ecc_keys()
+
+                    # Server public key gönder
+                    pub_bytes = serialize_public_key(self.ecc_public_key)
+                    pub_b64 = base64.b64encode(pub_bytes).decode("utf-8")
+                    self.conn.send(
+                        f"ECC_PUBLIC_KEY|{pub_b64}".encode("utf-8")
+                    )
+
+                    # 🔐 SESSION KEY TÜRET
+                    key_len = 16 if "AES" in self.current_algorithm else 8
+                    self.session_key = derive_session_key(
+                        self.ecc_private_key,
+                        self.client_ecc_public_key,
+                        key_len
+                    )
+
+                    self.log("[ECC] Session key türetildi")
                     continue
 
                 start_dec = time.time()
@@ -170,7 +218,7 @@ class ServerGUI:
                         key
                     )
 
-                # -------- SİMETRİK (AES / DES / MANUAL) --------
+                # -------- SİMETRİK (RSA / ECC) --------
                 else:
                     encrypted_msg = parts[1]
 
@@ -194,9 +242,7 @@ class ServerGUI:
     # ---------------- SHOW TIMING ----------------
     def show_timing(self):
         if self.last_decrypt_time is None:
-            self.timing_label.config(
-                text="⏱ Henüz ölçüm yok"
-            )
+            self.timing_label.config(text="⏱ Henüz ölçüm yok")
         else:
             self.timing_label.config(
                 text=f"⏱ Son Çözme Süresi: {self.last_decrypt_time:.6f} saniye"
@@ -226,7 +272,7 @@ class ServerGUI:
         packet = f"{algo}|{encrypted}"
         self.conn.send(packet.encode("utf-8"))
 
-        self.log(f"\nSen ({algo})")
+        self.log(f"\nSERVER ({algo})")
         self.log(f"ŞİFRELİ : {encrypted[:40]}...")
         self.log(f"ASIL    : {message}")
 
